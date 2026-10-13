@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tic Tac Toe</title>
+<style>
+  :root { --bg:#f6f7fb; --fg:#1d2033; --cell:#fff; --line:#d5d8e6; --x:#e0525e; --o:#3a7bd5; --win:#ffe9a8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14161f; --fg:#e8eaf3; --cell:#1f2230; --line:#33384d; --x:#ff6b76; --o:#5c9cff; --win:#4a4120; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+         gap:20px; padding:16px; background:var(--bg); color:var(--fg); font-family:system-ui, sans-serif; }
+  h1 { margin:0; font-size:2rem; }
+  #status { font-size:1.2rem; min-height:1.5em; }
+  #board { display:grid; grid-template-columns:repeat(3, 1fr); grid-template-rows:repeat(3, 1fr); gap:8px; width:min(90vw, 360px); aspect-ratio:1; }
+  .cell { min-height:0; padding:0; line-height:1; background:var(--cell); border:2px solid var(--line); border-radius:12px; font-size:clamp(2.5rem, 14vw, 4.5rem);
+          font-weight:700; cursor:pointer; color:var(--fg); transition:transform .08s, background .2s; }
+  .cell:hover:not(:disabled) { transform:scale(1.03); }
+  .cell:disabled { cursor:default; }
+  .cell.X { color:var(--x); } .cell.O { color:var(--o); }
+  .cell.win { background:var(--win); }
+  .controls { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; align-items:center; }
+  button.btn, select { font:inherit; padding:8px 16px; border-radius:8px; border:2px solid var(--line);
+                       background:var(--cell); color:var(--fg); cursor:pointer; }
+  #score { display:flex; gap:24px; font-size:1rem; }
+  #score b.X { color:var(--x); } #score b.O { color:var(--o); }
+</style>
+</head>
+<body>
+  <h1>Tic Tac Toe</h1>
+  <div class="controls">
+    <label>Mode:
+      <select id="mode">
+        <option value="cpu">vs Computer</option>
+        <option value="pvp">2 Players</option>
+      </select>
+    </label>
+    <button class="btn" id="reset">New game</button>
+  </div>
+  <div id="status" aria-live="polite"></div>
+  <div id="board"></div>
+  <div id="score"><span><b class="X">X</b>: <span id="sX">0</span></span><span>Draws: <span id="sD">0</span></span><span><b class="O">O</b>: <span id="sO">0</span></span></div>
+
+<script>
+const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const modeEl = document.getElementById('mode');
+const score = { X:0, O:0, D:0 };
+let board, turn, over;
+
+const cells = Array.from({length:9}, (_, i) => {
+  const b = document.createElement('button');
+  b.className = 'cell';
+  b.setAttribute('aria-label', 'Cell ' + (i + 1));
+  b.addEventListener('click', () => play(i));
+  boardEl.appendChild(b);
+  return b;
+});
+
+function winner(b) {
+  for (const l of LINES) {
+    const [a, c, d] = l;
+    if (b[a] && b[a] === b[c] && b[a] === b[d]) return { player: b[a], line: l };
+  }
+  return b.every(Boolean) ? { player: null } : null;
+}
+
+// Minimax: the computer (O) plays perfectly.
+function minimax(b, player) {
+  const w = winner(b);
+  if (w) return { score: w.player === 'O' ? 10 : w.player === 'X' ? -10 : 0 };
+  let best = { score: player === 'O' ? -Infinity : Infinity };
+  b.forEach((v, i) => {
+    if (v) return;
+    b[i] = player;
+    const s = minimax(b, player === 'O' ? 'X' : 'O').score;
+    b[i] = null;
+    const adj = s > 0 ? s - 1 : s < 0 ? s + 1 : 0; // prefer faster wins
+    if (player === 'O' ? adj > best.score : adj < best.score) best = { score: adj, move: i };
+  });
+  return best;
+}
+
+function render() {
+  board.forEach((v, i) => {
+    cells[i].textContent = v || '';
+    cells[i].className = 'cell' + (v ? ' ' + v : '');
+    cells[i].disabled = over || !!v;
+  });
+}
+
+function play(i) {
+  if (over || board[i]) return;
+  board[i] = turn;
+  turn = turn === 'X' ? 'O' : 'X';
+  check();
+  if (!over && modeEl.value === 'cpu' && turn === 'O') {
+    over = true; render(); // lock board while computer "thinks"
+    setTimeout(() => { over = false; play(minimax(board.slice(), 'O').move); }, 300);
+  }
+}
+
+function check() {
+  const w = winner(board);
+  if (w) {
+    over = true;
+    if (w.player) {
+      score[w.player]++;
+      statusEl.textContent = w.player + ' wins!';
+    } else {
+      score.D++;
+      statusEl.textContent = "It's a draw.";
+    }
+    document.getElementById('sX').textContent = score.X;
+    document.getElementById('sO').textContent = score.O;
+    document.getElementById('sD').textContent = score.D;
+    render();
+    if (w.line) w.line.forEach(i => cells[i].classList.add('win'));
+  } else {
+    statusEl.textContent = turn + "'s turn";
+    render();
+  }
+}
+
+function reset() {
+  board = Array(9).fill(null);
+  turn = 'X';
+  over = false;
+  check();
+}
+
+document.getElementById('reset').addEventListener('click', reset);
+modeEl.addEventListener('change', reset);
+reset();
+</script>
+</body>
+</html>
